@@ -168,10 +168,11 @@ if(document.modelContext?.registerTool){const life=new AbortController();window.
 initUppercase();
 initWarnings(()=>activePalette.colors);
 const book=initGuestbook({canvas:out,ready:()=>loaded&&!recording,capture,flush:flushAnalytics,track});
-function showPage(){const setting=location.hash==='#/setting',privacy=location.hash==='#/privacy',guest=location.hash==='#/guestbook';$('labView').hidden=setting||privacy||guest;$('settingsView').hidden=!setting;$('privacyView').hidden=!privacy;$('guestView').hidden=!guest;document.title=(setting?'SETTING / ':privacy?'PRIVACY / ':guest?'GUESTBOOK / ':'')+'404 DREAMS';if(guest)book.open();else if(setting)$('weight').focus();else if(!privacy)$('setting').focus()}
+function syncSettings(){for(const key of ['weight','detail','spark','halo']){const position=['spark','halo'].includes(key)?settings[key]:settings[key]*60/settingAnchors[key],input=$(key);input.value=String(position);input.style.setProperty('--fill',input.value+'%');const text=settingText(key,settings[key]);$(key+'Value').value=text;input.setAttribute('aria-valuetext',text);}}
+function showPage(){const setting=location.hash==='#/setting',privacy=location.hash==='#/privacy',guest=location.hash==='#/guestbook';$('labView').hidden=setting||privacy||guest;$('settingsView').hidden=!setting;$('privacyView').hidden=!privacy;$('guestView').hidden=!guest;document.title=(setting?'SETTING / ':privacy?'PRIVACY / ':guest?'GUESTBOOK / ':'')+'404 DREAMS';if(guest)book.open();else if(setting){syncSettings();$('weight').focus();}else if(!privacy)$('setting').focus()}
 $('setting').onclick=()=>{if(!recording){track('setting_open');location.hash='/setting'}};$('back').onclick=$('done').onclick=()=>{flushSettingEvent();location.hash='/'};addEventListener('hashchange',showPage);
 for(const key of ['weight','detail','spark','halo']){$(key).oninput=()=>{const position=Number($(key).value);settings[key]=settingValue(key,position);$(key+'Value').value=settingText(key,settings[key]);$(key).setAttribute('aria-valuetext',settingText(key,settings[key]));$(key).style.setProperty('--fill',position+'%');if(!['spark','halo'].includes(key))contourCache=null;if(loaded){render((performance.now()-started)/1000);clearTimeout(settingEventTimer);settingEventTimer=setTimeout(flushSettingEvent,400)}}}
-showPage();
+syncSettings();addEventListener('pageshow',syncSettings);showPage();
 
 const demo=new Image();demo.onload=async()=>{if(loadGeneration)return;image=demo;resize();drawSource();try{await ensureModel();if(loadGeneration)return;await detectPerson();loaded=true;controlsDisabled(false);run();beginView()}catch(e){console.error(e);status('SCAN FAILED. RELOAD.',true);controlsDisabled(false)}};demo.src='./reference.jpg';
 </script></body></html>
