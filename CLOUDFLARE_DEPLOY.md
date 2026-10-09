@@ -7,7 +7,7 @@ GitHub stores this project. Cloudflare Workers serves both the interface and `/a
 1. Put this source in your GitHub repository. Never commit local preview data, API tokens, or passwords.
 2. Add `404dreams.xyz` to your Cloudflare account and make its DNS zone active. If necessary, change the domain's nameservers at the registrar to those assigned by Cloudflare. The domain must already be registered to you.
 3. Create the Worker named `404-dreams`, the D1 database `404-dreams-db`, and the R2 bucket `404-dreams-media` in that account.
-4. Copy the actual D1 database ID into `wrangler.cloudflare.json`. The included value is an explicit placeholder, so deployment stops until it is replaced.
+4. Copy the actual D1 database ID into `wrangler.json`. The included value is an explicit placeholder, so deployment stops until it is replaced.
 5. Add an encrypted Worker secret named `ADMIN_INITIAL_PASSWORD` with a unique password of at least 8 characters. This external hosting configuration blocks initial admin setup while this secret is missing. The first admin login still requires a password change. Do not put the secret in GitHub or in the config file.
 6. Connect that Worker to your GitHub repository using Cloudflare's Git integration. Use `main` as the production branch, the repository root as the root directory, and `node scripts/deploy-cloudflare.mjs` as the deploy command. No front-end build is required: the Worker serves `public/` directly.
 
@@ -23,3 +23,7 @@ The managed test site's database and image bucket do not transfer automatically 
 - https://developers.cloudflare.com/workers/configuration/routing/custom-domains/
 - https://developers.cloudflare.com/d1/wrangler-commands/
 - https://developers.cloudflare.com/r2/buckets/create-buckets/
+
+## If the dashboard reports assets-only
+
+The repository root contains the standard `wrangler.json` with `main: worker/index.js`. In Worker Settings > Builds, connect this repository with the root directory left at the repository root, no build command, and deploy command `node scripts/deploy-cloudflare.mjs`. Do not point the root directory to `public` or use an assets-only upload. Retry the build on the latest main commit. Only a successful server deployment enables runtime secrets and the API. Check bindings DB and MEDIA after deployment. If migrations fail for permission reasons, give the build's deployment token access to D1 in this account; never place that token in the repository.
