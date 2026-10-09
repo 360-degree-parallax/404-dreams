@@ -1,0 +1,9 @@
+node_modules/
+.preview-data/
+.sites-runtime/
+dist/
+.wrangler/
+.env
+.env.*
+.dev.vars
+.dev.vars.*

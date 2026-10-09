@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1791511465038,
+      "tag": "0000_mute_taskmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791512614255,
+      "tag": "0001_volatile_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791514344489,
+      "tag": "0002_soft_robbie_robertson",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791515159511,
+      "tag": "0003_good_big_bertha",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791515759538,
+      "tag": "0004_curly_sally_floyd",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791516916074,
+      "tag": "0005_orange_captain_britain",
+      "breakpoints": true
+    }
+  ]
+}

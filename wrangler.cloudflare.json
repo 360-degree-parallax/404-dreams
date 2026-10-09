@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "404-dreams",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {"directory": "public", "binding": "ASSETS", "run_worker_first": true},
+  "routes": [{"pattern": "404dreams.xyz", "custom_domain": true}],
+  "vars": {"REQUIRE_ADMIN_BOOTSTRAP_SECRET": "true"},
+  "d1_databases": [{"binding": "DB", "database_name": "404-dreams-db", "database_id": "SET_YOUR_CLOUDFLARE_D1_DATABASE_ID", "migrations_dir": "drizzle"}],
+  "r2_buckets": [{"binding": "MEDIA", "bucket_name": "404-dreams-media"}]
+}

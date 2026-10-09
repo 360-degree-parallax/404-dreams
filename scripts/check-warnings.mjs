@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {ERROR_MESSAGES,initWarnings} from '../public/warnings.mjs';
+assert.equal(ERROR_MESSAGES.length,100);assert.equal(new Set(ERROR_MESSAGES).size,100);assert.ok(ERROR_MESSAGES.every(s=>/^[A-Z0-9]+$/.test(s)));
+const events={},textEvents={},nodes=[],motions=[];
+const text={value:'AB CD\nEF GH',selectionStart:5,selectionEnd:5,addEventListener(k,v){textEvents[k]=v;},setSelectionRange(start,end){this.selectionStart=start;this.selectionEnd=end;}};
+globalThis.document={addEventListener(k,v){events[k]=v;},getElementById(){return text;},body:{append(node){nodes.push(node);},animate(frames,options){assert.equal(options.duration,520);assert.match(options.easing,/steps/);assert.equal(frames.at(-1).transform,'translate(0,0) rotate(0deg)');return {cancel(){}};}},createElement(){return {style:{setProperty(k,v){this[k]=v;}},setAttribute(){},remove(){},animate(frames,options){motions.push({frames,options});return {finished:new Promise(()=>{})};}};}};
+globalThis.matchMedia=()=>({matches:false});
+const colors=Object.freeze(['#AFEEEE','#4169E1','#FF69B4']);initWarnings(()=>colors);
+let prevented=false;const event=()=>({code:'Space',key:' ',target:{closest(){return null;}},preventDefault(){prevented=true;}});
+events.keydown(event());assert.ok(prevented);assert.equal(motions[0].options.duration,5000);assert.equal(nodes[0].style.color,'#FF69B4');assert.equal(nodes[0].style.borderColor,undefined);assert.ok(motions[0].frames.every(frame=>!('opacity' in frame)));
+for(let i=1;i<100;i++)events.keydown(event());assert.equal(new Set(nodes.map(n=>n.textContent)).size,100);
+const count=nodes.length;events.keydown({...event(),repeat:true});assert.equal(nodes.length,count);
+prevented=false;events.keydown({...event(),target:{closest(){return {};}}});assert.equal(prevented,false);
+textEvents.input({isComposing:false});assert.equal(text.value,'ABCD\nEFGH');assert.equal(text.selectionStart,4);
+prevented=false;textEvents.beforeinput({data:' ',preventDefault(){prevented=true;}});assert.ok(prevented);
+assert.deepEqual(colors,['#AFEEEE','#4169E1','#FF69B4']);
+console.log('PASS: 100 unique no-space messages, palette-stable space handling, 5-second motion, input fields accept spaces, text caret cleanup.');

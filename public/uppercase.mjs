@@ -1,0 +1,2 @@
+export function forceUppercase(field){const value=field.value,start=field.selectionStart,end=field.selectionEnd,upper=value.replace(/[a-z]/g,c=>c.toUpperCase());if(upper!==value){field.value=upper;if(typeof start==='number')field.setSelectionRange(start,end);}}
+export function initUppercase(){const handle=event=>{const field=event.target;if(!event.isComposing&&field.closest?.('#guestView')&&field.matches('input,textarea'))forceUppercase(field);};document.addEventListener('input',handle);document.addEventListener('compositionend',handle);}

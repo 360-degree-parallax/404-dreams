@@ -1,0 +1,6 @@
+import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+const temporary=await mkdtemp(join(tmpdir(),'dream-lab-check-'));
+try{for(const name of ['index','admin']){const html=await readFile('public/'+name+'.html','utf8'),code=html.split('<script type="module">')[1].split('</script>')[0],file=join(temporary,name+'.mjs');await writeFile(file,code);execFileSync(process.execPath,['--check',file]);}execFileSync(process.execPath,['--check','public/analytics.mjs']);execFileSync(process.execPath,['--check','worker/index.js']);execFileSync(process.execPath,['--check','worker/admin-auth.js']);execFileSync(process.execPath,['--check','worker/traffic.js']);execFileSync(process.execPath,['--check','worker/guestbook.js']);execFileSync(process.execPath,['--check','public/guestbook.mjs']);execFileSync(process.execPath,['--check','public/warnings.mjs']);execFileSync(process.execPath,['--check','public/uppercase.mjs']);execFileSync(process.execPath,['--check','worker/guestbook-reset.js']);execFileSync(process.execPath,['--check','public/uppercase.mjs']);execFileSync(process.execPath,['--check','public/mp4-export.mjs']);console.log('PASS: client and Worker syntax.');}finally{await rm(temporary,{recursive:true,force:true});}
