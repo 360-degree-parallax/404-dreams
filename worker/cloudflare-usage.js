@@ -20,16 +20,20 @@ export function summarizeUsage(account,start,end){
   const missing=Math.max(0,totalRead-coveredRead);if(missing)groups.set('UNATTRIBUTED',{category:'UNATTRIBUTED',reads:missing,writes:0,calls:null});
   return {start,end,totalRead,totalWrite,coveredRead,coverage:totalRead?Math.min(100,coveredRead/totalRead*100):null,limit:5000000,percent:totalRead/5000000*100,queryLimitReached:queries.length>=100,classification:'INFERRED FROM SQL. SHARED QUERIES CAN SPAN MULTIPLE REQUESTS.',groups:[...groups.values()].map(g=>({...g,share:totalRead?g.reads/totalRead*100:null})).sort((a,b)=>b.reads-a.reads),top:top.sort((a,b)=>b.reads-a.reads).slice(0,30),updatedAt:Date.now()};
 }
+function safeDetail(value,token){
+  return String(value||'UNKNOWN ERROR').split(token).join('[REDACTED]').replace(/Bearer\s+\S+/gi,'Bearer [REDACTED]').replace(/[\r\n\t]+/g,' ').slice(0,500);
+}
 function upstreamError(messages,token,status=200){
-  const detail=String(messages||'EMPTY ANALYTICS RESPONSE').split(token).join('[REDACTED]').replace(/Bearer\s+\S+/gi,'Bearer [REDACTED]').replace(/[\r\n\t]+/g,' ').slice(0,500);
+  const detail=safeDetail(messages||'EMPTY ANALYTICS RESPONSE',token);
   const auth=status===401||status===403||/auth|permission|access denied|token|not authorized/i.test(detail);
   const code=auth?'ANALYTICS_PERMISSION':status===429?'ANALYTICS_RATE_LIMIT':'ANALYTICS_API_ERROR';
   const hint=auth?'CHECK ACCOUNT ANALYTICS / READ AND ACCOUNT SCOPE. ':'';
   return Object.assign(new Error(code+': '+hint+detail),{status:502,code});
 }
 export async function fetchCloudflareUsage(env,fetcher=fetch,now=new Date()){
-  const token=String(env.CF_ANALYTICS_TOKEN||'').trim();
+  const token=String(env.CF_ANALYTICS_TOKEN||'').trim().replace(/^Bearer\s+/i,'');
   if(!token)throw Object.assign(new Error('ADD CF_ANALYTICS_TOKEN AS A WORKER SECRET. ACCOUNT ANALYTICS / READ.'),{status:503,code:'ANALYTICS_TOKEN_REQUIRED'});
+  if(!/^[\x21-\x7e]+$/.test(token))throw Object.assign(new Error('ANALYTICS_TOKEN_FORMAT: SECRET MUST CONTAIN ONLY THE API TOKEN, WITHOUT SPACES, LINE BREAKS OR CURL COMMANDS.'),{status:503,code:'ANALYTICS_TOKEN_FORMAT'});
   const account=env.CF_ACCOUNT_ID||accountDefault,database=env.CF_D1_DATABASE_ID||databaseDefault,date=now.toISOString().slice(0,10),start=date+'T00:00:00Z',end=now.toISOString().replace(/\.\d{3}Z$/,'Z');
   if(!/^[a-f0-9]{32}$/i.test(account)||!/^[a-f0-9-]{36}$/i.test(database))throw Object.assign(new Error('CHECK THE CLOUDFLARE ACCOUNT / DATABASE ID.'),{status:503});
   // Inline filters let each dataset use its own GraphQL input type.
@@ -38,11 +42,27 @@ export async function fetchCloudflareUsage(env,fetcher=fetch,now=new Date()){
   const totals=envelope(`d1AnalyticsAdaptiveGroups(limit: 1, filter: {date_geq: "${date}", date_leq: "${date}", databaseId: "${database}"}) { sum { rowsRead rowsWritten } }`);
   const insights=envelope(`d1QueriesAdaptiveGroups(limit: 100, filter: {AND: [{datetimeHour_geq: "${start}", datetimeHour_leq: "${end}", databaseId: "${database}"}]}, orderBy: [sum_rowsRead_DESC]) { sum { rowsRead rowsWritten } count dimensions { query } }`);
   async function request(query,dataset){
-    let res,result;
+    let res,text;
+    const signal=AbortSignal.timeout(30000);
     try{
-      res=await fetcher('https://api.cloudflare.com/client/v4/graphql',{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({query})});
-      result=await res.json();
-    }catch{throw Object.assign(new Error('ANALYTICS_NETWORK_ERROR: CLOUDFLARE REQUEST FAILED OR TIMED OUT. RETRY.'),{status:502,code:'ANALYTICS_NETWORK_ERROR'});}
+      res=await fetcher('https://api.cloudflare.com/client/v4/graphql',{method:'POST',redirect:'error',signal,headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({query})});
+    }catch(e){
+      const timeout=signal.aborted||e?.name==='TimeoutError'||e?.name==='AbortError';
+      const code=timeout?'ANALYTICS_TIMEOUT':'ANALYTICS_NETWORK_ERROR';
+      const detail=timeout?'CLOUDFLARE DID NOT RESPOND WITHIN 30 SECONDS.':safeDetail((e?.name||'FETCH ERROR')+': '+(e?.message||'REQUEST FAILED'),token);
+      throw Object.assign(new Error(code+': '+detail),{status:502,code});
+    }
+    try{text=await res.text();}catch(e){
+      const code=signal.aborted?'ANALYTICS_TIMEOUT':'ANALYTICS_BODY_ERROR';
+      throw Object.assign(new Error(code+': HTTP '+res.status+' / '+safeDetail(e?.message||'RESPONSE BODY UNAVAILABLE',token)),{status:502,code});
+    }
+    let result;
+    try{result=JSON.parse(text);}catch{
+      // Never return an HTML error page or arbitrary response body to the client.
+      if(!res.ok)throw upstreamError('HTTP '+res.status+' / NON-JSON RESPONSE / '+safeDetail(res.headers.get('content-type')||'UNKNOWN CONTENT TYPE',token),token,res.status);
+      throw Object.assign(new Error('ANALYTICS_RESPONSE_FORMAT: HTTP '+res.status+' / EXPECTED JSON, RECEIVED '+safeDetail(res.headers.get('content-type')||'UNKNOWN CONTENT TYPE',token)),{status:502,code:'ANALYTICS_RESPONSE_FORMAT'});
+    }
+    if(!result||typeof result!=='object')throw upstreamError('INVALID JSON RESPONSE: HTTP '+res.status,token,res.status);
     const errors=result.errors||[];
     if(!res.ok||errors.length)throw upstreamError(errors.map(e=>e.message||e.code||'UPSTREAM ERROR').join(' / ')||'HTTP '+res.status,token,res.status);
     const rows=result.data?.viewer?.accounts?.[0]?.[dataset];
