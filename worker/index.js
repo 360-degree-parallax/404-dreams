@@ -1,3 +1,4 @@
+import {usageRoute} from './cloudflare-usage.js';
 import {cachedStats,meteredDatabase} from './stats-cache.js';
 import {pushRoute,runPushAlerts} from './push-alerts.js';
 import {dashboardStats,periodWindow} from './dashboard-stats.js';
@@ -72,6 +73,7 @@ export default {async scheduled(controller,env,ctx){ctx.waitUntil(runPushAlerts(
     if(url.pathname==='/api/events')return request.method==='POST'?await collect(request,env):response({error:'Method not allowed'},405);
     if(['/api/admin/session','/api/admin/login','/api/admin/password','/api/admin/logout'].includes(url.pathname))return await authRoute(request,env,url.pathname);
     if(url.pathname==='/api/admin/guestbook'||/^\/api\/admin\/guestbook\/[0-9a-f-]{36}\/delete$/.test(url.pathname)){const denied=await guardAdmin(request,env);if(denied)return denied;if(url.pathname.endsWith('/delete'))return await adminDeleteGuestPost(request,env);if(request.method!=='GET')return response({error:'Method not allowed'},405);url.pathname='/api/guestbook';return await guestbook(new Request(url,request),env);}
+    if(url.pathname==='/api/admin/d1-usage'){const denied=await guardAdmin(request,env);if(denied)return denied;return await usageRoute(request,env);}
     if(url.pathname==='/api/admin/stats'){const denied=await guardAdmin(request,env);if(denied)return denied;return request.method==='GET'?await stats(request,env):response({error:'Method not allowed'},405);}
     if(url.pathname==='/api/admin/push'||url.pathname.startsWith('/api/admin/push/')){const denied=await guardAdmin(request,env);if(denied)return denied;return await pushRoute(request,env);}
     if(url.pathname.startsWith('/api/'))return response({error:'Not found'},404);
