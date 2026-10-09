@@ -36,7 +36,7 @@ const aes=await crypto.subtle.importKey('raw',cek,'AES-GCM',false,['decrypt']),p
 const keys=await createVapidKeys(),authorization=await vapidAuthorization(subscription.endpoint,keys,now),token=authorization.match(/t=([^,]+)/)[1],parts=token.split('.'),claims=JSON.parse(new TextDecoder().decode(unbase64url(parts[1])));
 assert.equal(claims.aud,'https://web.push.apple.com');assert.equal(claims.exp,now+43200);assert.equal(claims.sub,'https://404dreams.xyz/');const pub={...keys.privateJwk};delete pub.d;
 assert(verify('sha256',Buffer.from(parts.slice(0,2).join('.')),{key:createPublicKey({key:pub,format:'jwk'}),dsaEncoding:'ieee-p1363'},Buffer.from(unbase64url(parts[2]))));
-let wire;assert((await sendWebPush(subscription,payload,keys,async(url,options)=>{wire={url,options};return new Response(null,{status:201});})).ok);assert.equal(wire.options.headers['content-encoding'],'aes128gcm');assert.equal(wire.options.redirect,'error');
+let wire;assert((await sendWebPush(subscription,payload,keys,async(url,options)=>{wire={url,options};return new Response(null,{status:201});})).ok);assert.equal(wire.options.headers['content-encoding'],'aes128gcm');assert.equal(wire.options.redirect,'manual');
 const req=(path,data,origin='https://404dreams.xyz')=>new Request('https://404dreams.xyz/api/admin/push'+path,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(data)});
 assert.equal((await worker.fetch(new Request('https://404dreams.xyz/api/admin/push'),env)).status,401);assert.equal((await worker.fetch(req('/subscribe',{subscription}),env)).status,401);
 assert.equal((await pushRoute(req('/subscribe',{subscription},'https://evil.example'),env)).status,403);
@@ -57,3 +57,5 @@ assert.equal((await worker.fetch(new Request('https://404dreams.xyz/api/admin/pu
 assert.equal((await worker.fetch(new Request('https://404dreams.xyz/api/admin/push/subscribe',{method:'POST',headers:{cookie:'dream_admin='+adminToken,origin:'https://evil.example','content-type':'application/json'},body:JSON.stringify({subscription})}),env)).status,403);
 let pending;await worker.scheduled({scheduledTime:(end+120)*1000},env,{waitUntil(p){pending=p;}});await pending;
 console.log('PASS: inclusive 1.5× threshold, zero baseline, exact hourly boundaries, unique visitors and reach, continuing sessions, encrypted push round trip, signed VAPID, endpoint checks, authenticated routes, CSRF, device deduplication, retries, expired-device removal, hourly deduplication and scheduled handler.');
+
+const redirectPush=await sendWebPush(subscription,payload,keys,async(url,options)=>{assert.equal(options.redirect,'manual');return new Response(null,{status:307,headers:{location:'https://example.com/'}});});assert.equal(redirectPush.ok,false);assert.equal(redirectPush.status,307);

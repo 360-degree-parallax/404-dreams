@@ -6,7 +6,7 @@ const fixture={d1AnalyticsAdaptiveGroups:[{sum:{rowsRead:1000,rowsWritten:100}}]
 const report=summarizeUsage(fixture,'START','END');assert.equal(report.totalRead,1000);assert.equal(report.coverage,90);assert.equal(report.groups.find(g=>g.category==='STATS').share,60);assert.equal(report.groups.find(g=>g.category==='UNATTRIBUTED').reads,100);assert.equal(summarizeUsage({},'','').coverage,null);
 let calls=0;await assert.rejects(fetchCloudflareUsage({},async()=>{calls++;}),e=>e.code==='ANALYTICS_TOKEN_REQUIRED');assert.equal(calls,0);
 const mock=async(url,options)=>{
-  calls++;assert.equal(url,'https://api.cloudflare.com/client/v4/graphql');assert.equal(options.headers.authorization,'Bearer PRIVATE_TEST_TOKEN');assert.equal(options.redirect,'error');
+  calls++;assert.equal(url,'https://api.cloudflare.com/client/v4/graphql');assert.equal(options.headers.authorization,'Bearer PRIVATE_TEST_TOKEN');assert.equal(options.redirect,'manual');
   const body=JSON.parse(options.body);assert(!body.query.includes('ZoneWorkersRequestsFilter_InputObject'));
   const isTotals=body.query.includes('d1AnalyticsAdaptiveGroups');
   if(isTotals){assert(body.query.includes('date_geq: "2026-10-09"'));assert(body.query.includes('limit: 1'));}
@@ -31,6 +31,7 @@ await assert.rejects(fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'PRIVATE_TEST_TOKE
 await assert.rejects(fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'PRIVATE_TEST_TOKEN'},async()=>new Response('not json',{headers:{'content-type':'text/plain'}})),e=>e.code==='ANALYTICS_RESPONSE_FORMAT');
 await assert.rejects(fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'TOKEN\nCURL'},async()=>{throw Error('MUST NOT FETCH');}),e=>e.code==='ANALYTICS_TOKEN_FORMAT');
 const bearer=await fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'Bearer PRIVATE_TEST_TOKEN'},mock,new Date('2026-10-09T14:50:00Z'));assert.equal(bearer.totalRead,1000);
+await assert.rejects(fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'PRIVATE_TEST_TOKEN'},async(url,options)=>{assert.equal(options.redirect,'manual');return new Response(null,{status:302,headers:{location:'https://example.com/'}});}),e=>e.code==='ANALYTICS_REDIRECT');
 const partial=await fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'PRIVATE_TEST_TOKEN'},async(url,options)=>JSON.parse(options.body).query.includes('d1AnalyticsAdaptiveGroups')?mock(url,options):cfError('dataset disabled PRIVATE_TEST_TOKEN'),new Date('2026-10-09T14:50:00Z'));
 assert.equal(partial.totalRead,1000);assert.equal(partial.insightsAvailable,false);assert.equal(partial.coverage,0);assert.equal(partial.groups[0].category,'UNATTRIBUTED');assert(!partial.warnings[0].includes('PRIVATE_TEST_TOKEN'));assert(partial.warnings[0].includes('dataset disabled'));
 const empty=await fetchCloudflareUsage({CF_ANALYTICS_TOKEN:'PRIVATE_TEST_TOKEN'},async(url,options)=>new Response(JSON.stringify({data:{viewer:{accounts:[{[JSON.parse(options.body).query.includes('d1AnalyticsAdaptiveGroups')?'d1AnalyticsAdaptiveGroups':'d1QueriesAdaptiveGroups']:[]}]}}})));

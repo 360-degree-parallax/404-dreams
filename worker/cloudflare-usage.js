@@ -45,13 +45,14 @@ export async function fetchCloudflareUsage(env,fetcher=fetch,now=new Date()){
     let res,text;
     const signal=AbortSignal.timeout(30000);
     try{
-      res=await fetcher('https://api.cloudflare.com/client/v4/graphql',{method:'POST',redirect:'error',signal,headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({query})});
+      res=await fetcher('https://api.cloudflare.com/client/v4/graphql',{method:'POST',redirect:'manual',signal,headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json'},body:JSON.stringify({query})});
     }catch(e){
       const timeout=signal.aborted||e?.name==='TimeoutError'||e?.name==='AbortError';
       const code=timeout?'ANALYTICS_TIMEOUT':'ANALYTICS_NETWORK_ERROR';
       const detail=timeout?'CLOUDFLARE DID NOT RESPOND WITHIN 30 SECONDS.':safeDetail((e?.name||'FETCH ERROR')+': '+(e?.message||'REQUEST FAILED'),token);
       throw Object.assign(new Error(code+': '+detail),{status:502,code});
     }
+    if(res.status>=300&&res.status<400)throw Object.assign(new Error('ANALYTICS_REDIRECT: HTTP '+res.status+' / REDIRECT REFUSED.'),{status:502,code:'ANALYTICS_REDIRECT'});
     try{text=await res.text();}catch(e){
       const code=signal.aborted?'ANALYTICS_TIMEOUT':'ANALYTICS_BODY_ERROR';
       throw Object.assign(new Error(code+': HTTP '+res.status+' / '+safeDetail(e?.message||'RESPONSE BODY UNAVAILABLE',token)),{status:502,code});

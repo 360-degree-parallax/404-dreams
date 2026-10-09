@@ -36,6 +36,6 @@ export async function vapidAuthorization(endpoint,keys,now=Math.floor(Date.now()
 export async function sendWebPush(subscription,payload,keys,fetcher=fetch){
   await validateSubscription(subscription);
   const body=await encryptPush(subscription,payload),authorization=await vapidAuthorization(subscription.endpoint,keys);
-  const res=await fetcher(subscription.endpoint,{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{authorization,'content-encoding':'aes128gcm','content-type':'application/octet-stream',TTL:'3600',Urgency:'normal'},body});
+  const res=await fetcher(subscription.endpoint,{method:'POST',redirect:'manual',signal:AbortSignal.timeout(10000),headers:{authorization,'content-encoding':'aes128gcm','content-type':'application/octet-stream',TTL:'3600',Urgency:'normal'},body});
   return {ok:res.status>=200&&res.status<300,expired:[404,410].includes(res.status),status:res.status};
 }
