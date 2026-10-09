@@ -39,18 +39,19 @@ async function deliver(db,alert,subscriptions,send,now){
 export async function runPushAlerts(env,now=Math.floor(Date.now()/1000),send=sendWebPush){
   const db=env.DB;if(!db)return;
   const subs=(await query(db,'SELECT * FROM push_subscriptions LIMIT 10')).results||[];if(!subs.length)return {sent:0,failed:0};
-  const snapshot=await compareHours(db,now);
-  if(snapshot.rising.length)await query(db,"INSERT OR IGNORE INTO push_alerts (id,created_at,window_end,kind,payload) VALUES (?,?,?,'surge',?)",'hour:'+snapshot.end,now,snapshot.end,JSON.stringify(notification(snapshot)));
-  // Retry temporary failures within the current hour, without sending successful deliveries twice.
-  const alerts=(await query(db,"SELECT * FROM push_alerts WHERE kind='surge' AND window_end=?",snapshot.end)).results||[];let sent=0,failed=0;
-  for(const alert of alerts){const r=await deliver(db,alert,subs,send,now);sent+=r.sent;failed+=r.failed;}
+  const end=Math.floor(now/HOUR)*HOUR,id='hour:'+end;
+  let alert=(await query(db,'SELECT * FROM push_alerts WHERE id=?',id)).results?.[0];
+  if(!alert){const snapshot=await compareHours(db,now),kind=snapshot.rising.length?'surge':'quiet';await query(db,'INSERT OR IGNORE INTO push_alerts (id,created_at,window_end,kind,payload) VALUES (?,?,?,?,?)',id,now,end,kind,JSON.stringify(kind==='surge'?notification(snapshot):{snapshot}));alert=(await query(db,'SELECT * FROM push_alerts WHERE id=?',id)).results?.[0];}
+  // Completed hours are immutable. Keep the snapshot, and retry only unfinished deliveries.
+  let sent=0,failed=0;
+  if(alert?.kind==='surge'){const delivered=(await query(db,"SELECT subscription_id FROM push_deliveries WHERE alert_id=? AND state='sent'",id)).results||[],done=new Set(delivered.map(d=>d.subscription_id)),pending=subs.filter(s=>!done.has(s.id));if(pending.length){const r=await deliver(db,alert,pending,send,now);sent+=r.sent;failed+=r.failed;}}
   await db.batch([db.prepare('DELETE FROM push_deliveries WHERE alert_id IN (SELECT id FROM push_alerts WHERE created_at<?)').bind(now-30*86400),db.prepare('DELETE FROM push_alerts WHERE created_at<?').bind(now-30*86400)]);
   return {sent,failed};
 }
 export async function pushRoute(request,env,send=sendWebPush){
   const db=env.DB,path=new URL(request.url).pathname,now=Math.floor(Date.now()/1000);
   if(path==='/api/admin/push'&&request.method==='GET'){
-    const k=await keys(db),snapshot=await compareHours(db,now),rows=await db.batch([db.prepare('SELECT id,created_at FROM push_subscriptions').bind(),db.prepare(`SELECT a.id,a.created_at,a.kind,a.payload,SUM(d.state='sent') sent,SUM(d.state='failed') failed,SUM(d.state='sending') pending FROM push_alerts a LEFT JOIN push_deliveries d ON d.alert_id=a.id GROUP BY a.id ORDER BY a.created_at DESC LIMIT 20`).bind()]);
+    const k=await keys(db),stored=(await query(db,'SELECT payload FROM push_alerts WHERE id=?','hour:'+Math.floor(now/HOUR)*HOUR)).results?.[0],snapshot=stored?JSON.parse(stored.payload).snapshot:await compareHours(db,now),rows=await db.batch([db.prepare('SELECT id,created_at FROM push_subscriptions').bind(),db.prepare(`SELECT a.id,a.created_at,a.kind,a.payload,SUM(d.state='sent') sent,SUM(d.state='failed') failed,SUM(d.state='sending') pending FROM (SELECT * FROM push_alerts WHERE kind IN ('surge','test') ORDER BY created_at DESC LIMIT 20) a LEFT JOIN push_deliveries d ON d.alert_id=a.id GROUP BY a.id ORDER BY a.created_at DESC LIMIT 20`).bind()]);
     return json({publicKey:k.publicKey,threshold:1.5,intervalMinutes:15,subscriptions:rows[0].results||[],snapshot,history:(rows[1].results||[]).map(x=>({...x,payload:JSON.parse(x.payload)}))});
   }
   if(request.method!=='POST')return json({error:'METHOD NOT ALLOWED'},405);

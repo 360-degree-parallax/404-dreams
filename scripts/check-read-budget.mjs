@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFile,readdir} from 'node:fs/promises';
+import {cachedStats,meteredDatabase} from '../worker/stats-cache.js';
+import worker from '../worker/index.js';
+import {runPushAlerts,pushRoute} from '../worker/push-alerts.js';
+const key={},clock={now:0};let builds=0;
+const load=async()=>{builds++;return {count:builds};};
+const a=await cachedStats(key,'7',load,()=>clock.now);assert.equal(a.cacheHit,false);
+const b=await cachedStats(key,'7',load,()=>clock.now);assert.equal(b.cacheHit,true);assert.equal(builds,1);
+await cachedStats(key,'30',load,()=>clock.now);assert.equal(builds,2);
+clock.now=60001;await cachedStats(key,'7',load,()=>clock.now);assert.equal(builds,3);
+let resolve,concurrent=0;const gate=new Promise(r=>resolve=r),k={};
+const one=cachedStats(k,'all',async()=>{concurrent++;await gate;return 42;});const two=cachedStats(k,'all',async()=>{concurrent++;return 0;});resolve();assert.equal((await one).value,42);assert.equal((await two).value,42);assert.equal(concurrent,1);
+const failure={};await assert.rejects(cachedStats(failure,'7',async()=>{throw Error('FAIL');}));assert.equal((await cachedStats(failure,'7',async()=>99)).value,99);
+const meter=meteredDatabase({prepare:sql=>({sql}),async batch(){return [{meta:{rows_read:123,rows_written:4}}];}});await meter.db.batch([meter.db.prepare('SELECT')]);assert.deepEqual(meter.usage,{queries:1,rowsRead:123,rowsWritten:4});
+const sqlite=new DatabaseSync(':memory:');for(const f of (await readdir('drizzle')).filter(f=>f.endsWith('.sql')).sort())sqlite.exec(await readFile('drizzle/'+f,'utf8'));
+let queries=[];const DB={prepare(sql){return {sql,values:[],bind(...values){this.values=values;return this;}}},async batch(statements){return statements.map(s=>{queries.push(s.sql);const q=sqlite.prepare(s.sql);if(/^\s*(SELECT|WITH)/i.test(s.sql)){const results=q.all(...s.values);return {results,meta:{rows_read:results.length,rows_written:0}};}return {results:[],meta:{...q.run(...s.values),rows_read:0,rows_written:0}};});}};
+const now=Math.floor(Date.now()/1000),token='b'.repeat(64),hash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex');
+sqlite.prepare("INSERT INTO admin_credentials VALUES (1,'HASH','SALT',0,0,0,0)").run();sqlite.prepare('INSERT INTO admin_sessions VALUES (?,0,?)').run(hash,now+3600);
+sqlite.prepare("INSERT INTO visits VALUES ('SESSION_A',?,?,NULL,'direct_unknown','','','','','unknown','VISITOR_A')").run(now,now);sqlite.prepare("INSERT INTO visitors VALUES ('VISITOR_A',?,?)").run(now,now);sqlite.prepare("INSERT INTO visitor_days VALUES ('VISITOR_A',?)").run(Math.floor((now+32400)/86400));
+function event(name,time,view){sqlite.prepare("INSERT INTO events VALUES (?,?,?,?,?,'IMAGE','PNG','TEST','[\"#000000\",\"#FFFFFF\",\"#FF69B4\"]','50:35:15','COMBO','LABEL',1,1,9,40)").run(crypto.randomUUID(),time,name,'SESSION_A',view);}
+event('generated',now,'VIEW_RECENT');event('file_created',now,'VIEW_RECENT');event('file_created',now,'VIEW_RECENT');event('generated',now-90*86400,'VIEW_OLD');event('file_created',now-90*86400,'VIEW_OLD');
+const get=()=>new Request('https://404dreams.xyz/api/admin/stats?days=7',{headers:{cookie:'dream_admin='+token}});
+const first=await (await worker.fetch(get(),{DB})).json();assert.equal(first.overview.generated,1);assert.equal(first.overview.saved,1);assert.equal(first.combos[0].png,1);assert.equal(first.databaseUsage.cacheHit,false);assert(first.databaseUsage.rowsRead>0);
+queries=[];const second=await (await worker.fetch(get(),{DB})).json();assert.equal(second.databaseUsage.cacheHit,true);assert.equal(second.databaseUsage.rowsRead,0);assert(!queries.some(sql=>sql.includes('WITH generated')||sql.includes('FROM events')));
+assert.equal((await worker.fetch(new Request('https://404dreams.xyz/api/admin/stats?days=7'),{DB})).status,401);
+const indexPlan=sqlite.prepare('EXPLAIN QUERY PLAN UPDATE visits SET ip=NULL WHERE ip IS NOT NULL AND first_at<?').all(now-30*86400);assert(indexPlan.some(x=>x.detail.includes('idx_visits_live_ip_time')));
+const source=await readFile('worker/index.js','utf8'),cohort=source.match(/const cohort=`([^`]+)`/)[1],plan=sqlite.prepare('EXPLAIN QUERY PLAN '+cohort+' SELECT COUNT(*) FROM generated LEFT JOIN saved USING(view_id)').all(now-7*86400);assert(plan.some(x=>x.detail.includes('SEARCH e USING INDEX idx_events_view_name')));assert(plan.some(x=>x.detail.includes('idx_events_name_time')));
+// Quiet hours are remembered too, so 15-minute checks do not scan events four times per hour.
+sqlite.prepare("INSERT INTO push_subscriptions VALUES ('DEVICE','https://web.push.apple.com/test','KEY','AUTH',?,0)").run(now);
+const end=Math.floor(now/3600)*3600;
+await runPushAlerts({DB},end+120);assert.equal(sqlite.prepare("SELECT kind FROM push_alerts WHERE id=?").get('hour:'+end).kind,'quiet');queries=[];await runPushAlerts({DB},end+900);assert(!queries.some(sql=>sql.includes('FROM events')));
+console.log('PASS: 60-second private cache, period isolation, concurrent deduplication, error retry, actual D1 metadata metering, authenticated cache access, saved-result equivalence, indexed lookups and one metric scan per completed push hour.');

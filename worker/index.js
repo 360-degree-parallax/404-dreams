@@ -1,3 +1,4 @@
+import {cachedStats,meteredDatabase} from './stats-cache.js';
 import {pushRoute,runPushAlerts} from './push-alerts.js';
 import {dashboardStats,periodWindow} from './dashboard-stats.js';
 import {guestbook,adminDeleteGuestPost} from './guestbook.js';
@@ -36,8 +37,12 @@ async function visit(request,env){
 }
 async function stats(request,env){
   const days=new URL(request.url).searchParams.get('days')||'30';if(!['7','30','all'].includes(days))return response({error:'Invalid period'},400);
-  const {since}=periodWindow(days),db=database(env);
-  const cohort=`WITH generated AS (SELECT * FROM events WHERE name='generated' AND created_at>=?), saved AS (SELECT view_id,MAX(format='PNG') png,MAX(format='WEBM') webm,MAX(format='MP4') mp4 FROM events WHERE name='file_created' GROUP BY view_id)`;
+  const {value,cacheHit}=await cachedStats(database(env),days,async()=>{const meter=meteredDatabase(database(env)),data=await buildStats(meter.db,days);console.info('404 DREAMS D1 stats',JSON.stringify({period:days,...meter.usage}));return {...data,databaseUsage:meter.usage};});
+  return response({...value,databaseUsage:{...value.databaseUsage,computedRowsRead:value.databaseUsage.rowsRead,rowsRead:cacheHit?0:value.databaseUsage.rowsRead,cacheHit,cacheSeconds:60}});
+}
+async function buildStats(db,days){
+  const {since}=periodWindow(days);
+  const cohort=`WITH generated AS (SELECT * FROM events WHERE name='generated' AND created_at>=?), saved AS (SELECT e.view_id,MAX(e.format='PNG') png,MAX(e.format='WEBM') webm,MAX(e.format='MP4') mp4 FROM (SELECT DISTINCT view_id FROM generated) g CROSS JOIN events e INDEXED BY idx_events_view_name WHERE e.view_id=g.view_id AND e.name='file_created' GROUP BY e.view_id)`;
   const queries=[
     db.prepare('SELECT COUNT(DISTINCT session_id) sessions, SUM(name=\'random_click\') random_clicks,SUM(name=\'save_click\') save_clicks,SUM(name=\'file_created\') files,SUM(name=\'file_created\' AND format=\'PNG\') png,SUM(name=\'file_created\' AND format=\'WEBM\') webm,SUM(name=\'file_created\' AND format=\'MP4\') mp4,SUM(name=\'export_failed\') failed,SUM(name=\'upload_complete\') uploads FROM events WHERE created_at>=?').bind(since),
     db.prepare(cohort+' SELECT COUNT(*) generated,COUNT(saved.view_id) saved FROM generated LEFT JOIN saved USING(view_id)').bind(since),
@@ -57,7 +62,7 @@ async function stats(request,env){
   );
   const result=await db.batch(queries),rows=i=>result[i].results||[];
   const dashboard=await dashboardStats(db,days);
-  return response({dashboard,period:days,now:Date.now(),traffic:rows(8),visits:rows(9),visitCount:rows(10)[0]?.total||0,overview:{...rows(0)[0],...rows(1)[0]},combos:rows(2),palettes:rows(3),events:rows(4),settings:rows(5)[0],recent:rows(6),started:rows(7)[0]?.started||null});
+  return {dashboard,period:days,now:Date.now(),traffic:rows(8),visits:rows(9),visitCount:rows(10)[0]?.total||0,overview:{...rows(0)[0],...rows(1)[0]},combos:rows(2),palettes:rows(3),events:rows(4),settings:rows(5)[0],recent:rows(6),started:rows(7)[0]?.started||null};
 }
 export default {async scheduled(controller,env,ctx){ctx.waitUntil(runPushAlerts(env,Math.floor(controller.scheduledTime/1000)));},async fetch(request,env){
   const url=new URL(request.url);
