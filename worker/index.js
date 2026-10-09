@@ -1,3 +1,4 @@
+import {pushRoute,runPushAlerts} from './push-alerts.js';
 import {dashboardStats,periodWindow} from './dashboard-stats.js';
 import {guestbook,adminDeleteGuestPost} from './guestbook.js';
 import {visitData,recordVisits} from './traffic.js';
@@ -58,7 +59,7 @@ async function stats(request,env){
   const dashboard=await dashboardStats(db,days);
   return response({dashboard,period:days,now:Date.now(),traffic:rows(8),visits:rows(9),visitCount:rows(10)[0]?.total||0,overview:{...rows(0)[0],...rows(1)[0]},combos:rows(2),palettes:rows(3),events:rows(4),settings:rows(5)[0],recent:rows(6),started:rows(7)[0]?.started||null});
 }
-export default {async fetch(request,env){
+export default {async scheduled(controller,env,ctx){ctx.waitUntil(runPushAlerts(env,Math.floor(controller.scheduledTime/1000)));},async fetch(request,env){
   const url=new URL(request.url);
   try{
     if(url.pathname==='/api/guestbook'||url.pathname.startsWith('/api/guestbook/'))return await guestbook(request,env);
@@ -67,6 +68,7 @@ export default {async fetch(request,env){
     if(['/api/admin/session','/api/admin/login','/api/admin/password','/api/admin/logout'].includes(url.pathname))return await authRoute(request,env,url.pathname);
     if(url.pathname==='/api/admin/guestbook'||/^\/api\/admin\/guestbook\/[0-9a-f-]{36}\/delete$/.test(url.pathname)){const denied=await guardAdmin(request,env);if(denied)return denied;if(url.pathname.endsWith('/delete'))return await adminDeleteGuestPost(request,env);if(request.method!=='GET')return response({error:'Method not allowed'},405);url.pathname='/api/guestbook';return await guestbook(new Request(url,request),env);}
     if(url.pathname==='/api/admin/stats'){const denied=await guardAdmin(request,env);if(denied)return denied;return request.method==='GET'?await stats(request,env):response({error:'Method not allowed'},405);}
+    if(url.pathname==='/api/admin/push'||url.pathname.startsWith('/api/admin/push/')){const denied=await guardAdmin(request,env);if(denied)return denied;return await pushRoute(request,env);}
     if(url.pathname.startsWith('/api/'))return response({error:'Not found'},404);
     if(!['GET','HEAD'].includes(request.method))return response({error:'Method not allowed'},405);
     if(['/admin','/admin/','/admin.html'].includes(url.pathname)){

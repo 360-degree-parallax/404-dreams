@@ -4,10 +4,38 @@
   "main": "worker/index.js",
   "workers_dev": true,
   "compatibility_date": "2026-09-01",
-  "assets": {"directory": "public", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none"},
-  "routes": [{"pattern": "404dreams.xyz", "custom_domain": true}],
-  "vars": {"REQUIRE_ADMIN_BOOTSTRAP_SECRET": "true"},
-  "d1_databases": [{"binding": "DB", "database_name": "404-dreams-db", "database_id": "dcf6bb51-db96-4cbd-8c36-c4255856f0b1", "migrations_dir": "drizzle"}],
-  "r2_buckets": [{"binding": "MEDIA", "bucket_name": "404-dreams-media"}]
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "html_handling": "none"
+  },
+  "routes": [
+    {
+      "pattern": "404dreams.xyz",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "REQUIRE_ADMIN_BOOTSTRAP_SECRET": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "404-dreams-db",
+      "database_id": "dcf6bb51-db96-4cbd-8c36-c4255856f0b1",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "404-dreams-media"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "*/15 * * * *"
+    ]
+  }
 }
-
