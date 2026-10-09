@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
 import worker from '../worker/index.js';
-const sqlite=new DatabaseSync(':memory:');for(const file of ['0000_mute_taskmaster.sql','0001_volatile_gauntlet.sql','0002_soft_robbie_robertson.sql','0003_good_big_bertha.sql','0004_curly_sally_floyd.sql','0005_orange_captain_britain.sql'])sqlite.exec(await readFile('drizzle/'+file,'utf8'));
+const sqlite=new DatabaseSync(':memory:');for(const file of ['0000_mute_taskmaster.sql','0001_volatile_gauntlet.sql','0002_soft_robbie_robertson.sql','0003_good_big_bertha.sql','0004_curly_sally_floyd.sql','0005_orange_captain_britain.sql','0006_dream_visitor_metrics.sql'])sqlite.exec(await readFile('drizzle/'+file,'utf8'));
 const DB={prepare(sql){let values=[];return {sql,bind(...args){values=args;return this},get values(){return values}}},async batch(statements){return statements.map(s=>{const stmt=sqlite.prepare(s.sql);return /^\s*(SELECT|WITH)/i.test(s.sql)?{results:stmt.all(...s.values)}:{results:[],meta:stmt.run(...s.values)}})}};
 const env={DB,ASSETS:{fetch:()=>new Response('asset')}};
 const event=(name,viewId,format='')=>({id:crypto.randomUUID(),name,viewId,sessionId:'session-test',source:'DEMO',format,palette:'TEST',colors:['#C8A2C8','#556B2F','#FFA500'],ratio:[50,35,15],comboKey:'background:layered:14:random:DITHER:false',comboLabel:'BACKGR / WAVE + DITHER / RANDOM',seed:1248,weight:1,detail:9,spark:15});

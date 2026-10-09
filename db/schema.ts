@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 
 export const events = sqliteTable('events', {
   id: text('id').primaryKey(),
@@ -45,7 +45,8 @@ export const visits = sqliteTable('visits', {
   content: text('content').notNull(),
   referrer: text('referrer').notNull(),
   evidence: text('evidence').notNull(),
-}, table => [index('idx_visits_first_at').on(table.firstAt)]);
+  visitorId: text('visitor_id'),
+}, table => [index('idx_visits_first_at').on(table.firstAt),index('idx_visits_visitor').on(table.visitorId)]);
 
 export const guestbook = sqliteTable('guestbook', {
   id: text('id').primaryKey(),
@@ -69,3 +70,6 @@ export const guestbookLikes = sqliteTable('guestbook_likes', {
   voterHash: text('voter_hash').notNull(),
   createdAt: integer('created_at').notNull(),
 }, table => [uniqueIndex('idx_guestbook_like_voter').on(table.postId, table.voterHash)]);
+
+export const visitors = sqliteTable('visitors', {id:text('id').primaryKey(),firstAt:integer('first_at').notNull(),lastAt:integer('last_at').notNull()}, table=>[index('idx_visitors_first_at').on(table.firstAt)]);
+export const visitorDays = sqliteTable('visitor_days', {visitorId:text('visitor_id').notNull(),day:integer('day').notNull()}, table=>[primaryKey({columns:[table.visitorId,table.day]}),index('idx_visitor_days_day').on(table.day)]);

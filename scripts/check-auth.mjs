@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
 import worker from '../worker/index.js';
-const sqlite=new DatabaseSync(':memory:');for(const file of ['0000_mute_taskmaster.sql','0001_volatile_gauntlet.sql','0002_soft_robbie_robertson.sql','0003_good_big_bertha.sql','0004_curly_sally_floyd.sql','0005_orange_captain_britain.sql'])sqlite.exec(await readFile('drizzle/'+file,'utf8'));
+const sqlite=new DatabaseSync(':memory:');for(const file of ['0000_mute_taskmaster.sql','0001_volatile_gauntlet.sql','0002_soft_robbie_robertson.sql','0003_good_big_bertha.sql','0004_curly_sally_floyd.sql','0005_orange_captain_britain.sql','0006_dream_visitor_metrics.sql'])sqlite.exec(await readFile('drizzle/'+file,'utf8'));
 const DB={prepare(sql){let values=[];return {sql,bind(...args){values=args;return this},get values(){return values}}},async batch(statements){return statements.map(s=>{const stmt=sqlite.prepare(s.sql);return /^\s*(SELECT|WITH)/i.test(s.sql)?{results:stmt.all(...s.values)}:{results:[],meta:stmt.run(...s.values)}})}};
 const env={DB,ASSETS:{fetch:()=>new Response('asset')}};
 const request=(path,method='GET',data,cookie,origin='https://lab.test')=>worker.fetch(new Request('https://lab.test'+path,{method,headers:{...(cookie?{cookie}:{}),...(method==='POST'?{'content-type':'application/json',origin}:{})},...(method==='POST'?{body:JSON.stringify(data||{})}:{})}),env);

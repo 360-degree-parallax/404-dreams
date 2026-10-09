@@ -1,3 +1,4 @@
+import {dashboardStats,periodWindow} from './dashboard-stats.js';
 import {guestbook,adminDeleteGuestPost} from './guestbook.js';
 import {visitData,recordVisits} from './traffic.js';
 import {guardAdmin,authRoute,endAdminSession} from './admin-auth.js';
@@ -34,7 +35,7 @@ async function visit(request,env){
 }
 async function stats(request,env){
   const days=new URL(request.url).searchParams.get('days')||'30';if(!['7','30','all'].includes(days))return response({error:'Invalid period'},400);
-  const since=days==='all'?0:Math.floor(Date.now()/1000)-Number(days)*86400,db=database(env);
+  const {since}=periodWindow(days),db=database(env);
   const cohort=`WITH generated AS (SELECT * FROM events WHERE name='generated' AND created_at>=?), saved AS (SELECT view_id,MAX(format='PNG') png,MAX(format='WEBM') webm,MAX(format='MP4') mp4 FROM events WHERE name='file_created' GROUP BY view_id)`;
   const queries=[
     db.prepare('SELECT COUNT(DISTINCT session_id) sessions, SUM(name=\'random_click\') random_clicks,SUM(name=\'save_click\') save_clicks,SUM(name=\'file_created\') files,SUM(name=\'file_created\' AND format=\'PNG\') png,SUM(name=\'file_created\' AND format=\'WEBM\') webm,SUM(name=\'file_created\' AND format=\'MP4\') mp4,SUM(name=\'export_failed\') failed,SUM(name=\'upload_complete\') uploads FROM events WHERE created_at>=?').bind(since),
@@ -47,14 +48,15 @@ async function stats(request,env){
     db.prepare('SELECT MIN(created_at) started FROM events').bind(),
   ];
   await recordVisits(db,[]);
-  const activity="WITH activity AS (SELECT session_id,SUM(name='generated') generated,COUNT(DISTINCT CASE WHEN name='file_created' THEN view_id END) saved FROM events GROUP BY session_id) ";
+  const activity="WITH activity AS (SELECT session_id,SUM(name='generated') generated,COUNT(DISTINCT CASE WHEN name='file_created' THEN view_id END) saved FROM events WHERE created_at>=? GROUP BY session_id) ";
   queries.push(
-    db.prepare(activity+'SELECT v.channel,v.medium,v.campaign,v.content,COUNT(*) sessions,SUM(COALESCE(a.generated,0)) generated,SUM(COALESCE(a.saved,0)) saved FROM visits v LEFT JOIN activity a USING(session_id) WHERE v.first_at>=? GROUP BY v.channel,v.medium,v.campaign,v.content ORDER BY sessions DESC LIMIT 100').bind(since),
-    db.prepare(activity+'SELECT v.*,COALESCE(a.generated,0) generated,COALESCE(a.saved,0) saved FROM visits v LEFT JOIN activity a USING(session_id) WHERE v.first_at>=? ORDER BY v.first_at DESC LIMIT 100').bind(since),
+    db.prepare(activity+'SELECT v.channel,v.medium,v.campaign,v.content,COUNT(*) sessions,SUM(COALESCE(a.generated,0)) generated,SUM(COALESCE(a.saved,0)) saved FROM visits v LEFT JOIN activity a USING(session_id) WHERE v.first_at>=? GROUP BY v.channel,v.medium,v.campaign,v.content ORDER BY sessions DESC LIMIT 100').bind(since,since),
+    db.prepare(activity+'SELECT v.*,COALESCE(a.generated,0) generated,COALESCE(a.saved,0) saved FROM visits v LEFT JOIN activity a USING(session_id) WHERE v.first_at>=? ORDER BY v.first_at DESC LIMIT 100').bind(since,since),
     db.prepare('SELECT COUNT(*) total FROM visits WHERE first_at>=?').bind(since)
   );
   const result=await db.batch(queries),rows=i=>result[i].results||[];
-  return response({period:days,now:Date.now(),traffic:rows(8),visits:rows(9),visitCount:rows(10)[0]?.total||0,overview:{...rows(0)[0],...rows(1)[0]},combos:rows(2),palettes:rows(3),events:rows(4),settings:rows(5)[0],recent:rows(6),started:rows(7)[0]?.started||null});
+  const dashboard=await dashboardStats(db,days);
+  return response({dashboard,period:days,now:Date.now(),traffic:rows(8),visits:rows(9),visitCount:rows(10)[0]?.total||0,overview:{...rows(0)[0],...rows(1)[0]},combos:rows(2),palettes:rows(3),events:rows(4),settings:rows(5)[0],recent:rows(6),started:rows(7)[0]?.started||null});
 }
 export default {async fetch(request,env){
   const url=new URL(request.url);
