@@ -12,7 +12,17 @@ export function lineChart(rows,key,label){
 function bars(rows,total){return rows.map(r=>`<div class="bar-row"><div><span>${safe(r.label)}</span><strong>${fmt(r.value)} <small>${percent(pct(r.value,total))}</small></strong></div><div class="bar-track"><span style="width:${Math.min(100,pct(r.value,total))}%"></span></div></div>`).join('');}
 function metric(label,value,note){return `<article class="metric"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;}
 function renderDaily(){if(!dashboard)return;const key=$('dailyMetric').value,label={users:'DAU',clicks:'RANDOM CLICKS',randomUsers:'RANDOM USERS',exportUsers:'EXPORT USERS',sessions:'PAGE SESSIONS'}[key];$('dailyChart').innerHTML=lineChart(dashboard.daily,key,label);}
-export function paintDashboard(d){
+export function actionSummary(events=[]){
+  const counts=new Map(events.map(e=>[e.name,Number(e.count)||0]));
+  const groups=[['RANDOM',['random_click']],['SAVE',['save_click']],['UPLOAD',['upload_complete']],['SETTINGS',['setting_open','setting_change']],['SHARE',['guestbook_share']],['SAVE MENU',['save_menu']]];
+  const items=groups.map(([label,names])=>({label,value:names.reduce((n,k)=>n+(counts.get(k)||0),0)}));
+  return {items,total:items.reduce((n,x)=>n+x.value,0)};
+}
+export function paintDashboard(d,events=[],period='30'){
+  const actions=actionSummary(events);
+  $('actionTotal').textContent=fmt(actions.total);
+  $('actionPeriod').textContent=period==='all'?'ALL TIME / KST':'LAST '+period+' CALENDAR DAYS / KST';
+  $('actionBreakdown').innerHTML=actions.items.map(x=>'<div class="action-item"><span>'+x.label+'</span><strong>'+fmt(x.value)+'</strong><small>'+percent(pct(x.value,actions.total))+' OF ACTIONS</small></div>').join('');
   dashboard=d;const o=d.overview,u=o.users||0,r=d.rolling;
   $('metrics').innerHTML=[metric('DAU / TODAY',fmt(r.dau),'UNIQUE BROWSERS / KST'),metric('WAU / 7 DAYS',fmt(r.wau),'ROLLING 7 CALENDAR DAYS'),metric('MAU / 30 DAYS',fmt(r.mau),'ROLLING 30 CALENDAR DAYS'),metric('DAU / MAU',percent(pct(r.dau,r.mau)),'TODAY’S SHARE OF MONTHLY USERS'),metric('PERIOD USERS',fmt(u),'UNIQUE BROWSERS IN SELECTED PERIOD'),metric('RETURNING',percent(pct(o.returning_users,u)),fmt(o.returning_users)+' RETURNING / '+fmt(u)+' USERS'),metric('RANDOM REACH',percent(pct(o.random_users,u)),fmt(o.random_users)+' CLICKERS / '+fmt(u)+' USERS'),metric('CLICKS / USER',avg(o.random_clicks,u),fmt(o.random_clicks)+' RANDOM CLICKS / ALL USERS'),metric('CLICKS / CLICKER',avg(o.random_clicks,o.random_users),'RANDOM USERS ONLY'),metric('EXPORT REACH',percent(pct(o.export_users,u)),fmt(o.export_users)+' EXPORTERS / '+fmt(u)+' USERS'),metric('ENGAGEMENT',percent(pct(o.engaged_users,u)),'ANY RANDOM, UPLOAD, SAVE, SETTING OR SHARE'),metric('PAGE SESSIONS',fmt(d.sessions.sessions),fmt(d.sessions.legacy_sessions)+' LEGACY / UNIDENTIFIED')].join('');
   $('metricNote').textContent='KST CALENDAR DAYS · UNIQUE USER = ONE ANONYMOUS BROWSER, NOT ONE PERSON · TODAY IS IN PROGRESS.';
