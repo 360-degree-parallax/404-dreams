@@ -2,6 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "404-dreams",
   "main": "worker/index.js",
+  "workers_dev": true,
   "compatibility_date": "2026-09-01",
   "assets": {"directory": "public", "binding": "ASSETS", "run_worker_first": true},
   "routes": [{"pattern": "404dreams.xyz", "custom_domain": true}],
