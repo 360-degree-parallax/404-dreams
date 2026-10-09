@@ -72,5 +72,14 @@ export default {async fetch(request,env){
     }
     if(url.pathname==='/')url.pathname='/index.html';
     return await env.ASSETS.fetch(new Request(url,request));
-  }catch(error){console.error('404 DREAMS request failed',error);return response({error:'Temporarily unavailable. Please retry.'},503);}
+  }catch(error){
+    console.error('404 DREAMS request failed',error);
+    const message=String(error?.message||'');
+    if(url.pathname.startsWith('/api/admin/')||['/admin','/admin/','/admin.html'].includes(url.pathname)){
+      if(message==='Configure ADMIN_INITIAL_PASSWORD before first login')return response({code:'ADMIN_SECRET_REQUIRED',error:'ADMIN SECRET REQUIRED. SET ADMIN_INITIAL_PASSWORD TO AT LEAST 8 CHARACTERS IN WORKER SETTINGS, THEN DEPLOY.'},503);
+      if(message==='Database unavailable')return response({code:'DATABASE_BINDING_REQUIRED',error:'DATABASE CONNECTION REQUIRED. CHECK THE DB BINDING IN WORKER SETTINGS.'},503);
+      if(/no such table|no such column/i.test(message))return response({code:'DATABASE_MIGRATIONS_REQUIRED',error:'DATABASE SETUP REQUIRED. USE node scripts/deploy-cloudflare.mjs AS THE CLOUDFLARE DEPLOY COMMAND, THEN RETRY THE BUILD.'},503);
+    }
+    return response({code:'SERVER_ERROR',error:'Temporarily unavailable. Please retry.'},503);
+  }
 }};

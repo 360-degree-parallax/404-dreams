@@ -7,7 +7,7 @@ const cookie=(request,token,age=lifetime)=>cookieName+'='+token+'; Path=/; HttpO
 async function digest(token){return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(token))))}
 async function hash(password,salt){const key=await crypto.subtle.importKey('raw',encoder.encode(password),'PBKDF2',false,['deriveBits']);return hex(new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:encoder.encode(salt),iterations:100000},key,256)))}
 function equal(a,b){if(a.length!==b.length)return false;let difference=0;for(let i=0;i<a.length;i++)difference|=a.charCodeAt(i)^b.charCodeAt(i);return difference===0;}
-async function query(db,sql,...values){return (await db.batch([db.prepare(sql).bind(...values)]))[0];}
+async function query(db,sql,...values){if(!db?.prepare||!db?.batch)throw new Error('Database unavailable');return (await db.batch([db.prepare(sql).bind(...values)]))[0];}
 async function credentials(db,env={}){
   let config=(await query(db,'SELECT * FROM admin_credentials WHERE id=1')).results?.[0];
   if(!config){if(env.REQUIRE_ADMIN_BOOTSTRAP_SECRET==='true'&&(typeof env.ADMIN_INITIAL_PASSWORD!=='string'||env.ADMIN_INITIAL_PASSWORD.length<8))throw new Error('Configure ADMIN_INITIAL_PASSWORD before first login');const salt=random(16),initial=await hash(env.ADMIN_INITIAL_PASSWORD||'0000',salt);await query(db,'INSERT OR IGNORE INTO admin_credentials (id,hash,salt,version,must_change,failures,locked_until) VALUES (1,?,?,0,1,0,0)',initial,salt);config=(await query(db,'SELECT * FROM admin_credentials WHERE id=1')).results?.[0];}
